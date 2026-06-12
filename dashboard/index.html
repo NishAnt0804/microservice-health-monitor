@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Real-time health monitoring dashboard for microservices deployed on AWS ECS with CI/CD pipeline visibility.">
+    <title>Microservice Health Monitor — Dashboard</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+    <!-- Background Glow Effects -->
+    <div class="bg-glow bg-glow-1"></div>
+    <div class="bg-glow bg-glow-2"></div>
+    <div class="bg-glow bg-glow-3"></div>
+
+    <!-- Header -->
+    <header class="header" id="main-header">
+        <div class="header-left">
+            <div class="logo">
+                <div class="logo-icon">
+                    <svg width="28" height="28" viewBox="0 0 28 28" fill="none">
+                        <rect x="2" y="2" width="10" height="10" rx="3" fill="#6C5CE7" opacity="0.9"/>
+                        <rect x="16" y="2" width="10" height="10" rx="3" fill="#00D2D3" opacity="0.9"/>
+                        <rect x="2" y="16" width="10" height="10" rx="3" fill="#FD79A8" opacity="0.9"/>
+                        <rect x="16" y="16" width="10" height="10" rx="3" fill="#FDCB6E" opacity="0.9"/>
+                    </svg>
+                </div>
+                <div>
+                    <h1>Health Monitor</h1>
+                    <span class="header-subtitle">Microservice Observability Platform</span>
+                </div>
+            </div>
+        </div>
+        <div class="header-right">
+            <div class="connection-status" id="connection-status">
+                <span class="status-dot status-dot-live"></span>
+                <span id="connection-text">Live</span>
+            </div>
+            <div class="last-check" id="last-check">
+                Last check: --
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+        <!-- Summary Bar -->
+        <section class="summary-bar" id="summary-bar">
+            <div class="summary-card" id="summary-total">
+                <div class="summary-icon">📡</div>
+                <div class="summary-info">
+                    <span class="summary-value" id="total-services">3</span>
+                    <span class="summary-label">Services</span>
+                </div>
+            </div>
+            <div class="summary-card" id="summary-healthy">
+                <div class="summary-icon">✅</div>
+                <div class="summary-info">
+                    <span class="summary-value summary-value-green" id="healthy-count">-</span>
+                    <span class="summary-label">Healthy</span>
+                </div>
+            </div>
+            <div class="summary-card" id="summary-degraded">
+                <div class="summary-icon">⚠️</div>
+                <div class="summary-info">
+                    <span class="summary-value summary-value-yellow" id="degraded-count">-</span>
+                    <span class="summary-label">Degraded</span>
+                </div>
+            </div>
+            <div class="summary-card" id="summary-down">
+                <div class="summary-icon">🔴</div>
+                <div class="summary-info">
+                    <span class="summary-value summary-value-red" id="down-count">-</span>
+                    <span class="summary-label">Down</span>
+                </div>
+            </div>
+            <div class="summary-card" id="summary-uptime">
+                <div class="summary-icon">📊</div>
+                <div class="summary-info">
+                    <span class="summary-value" id="avg-uptime">--%</span>
+                    <span class="summary-label">Avg Uptime</span>
+                </div>
+            </div>
+        </section>
+
+        <!-- Service Health Cards -->
+        <section class="services-grid" id="services-grid">
+            <!-- Cards rendered by JS -->
+        </section>
+
+        <!-- Bottom Panels -->
+        <section class="bottom-panels">
+            <!-- Response Time Chart -->
+            <div class="panel" id="response-chart-panel">
+                <div class="panel-header">
+                    <h2>Response Times</h2>
+                    <span class="panel-badge">Last 30 checks</span>
+                </div>
+                <div class="chart-container" id="response-chart">
+                    <canvas id="response-canvas"></canvas>
+                </div>
+            </div>
+
+            <!-- Incident Log -->
+            <div class="panel" id="incident-panel">
+                <div class="panel-header">
+                    <h2>Incident Log</h2>
+                    <span class="panel-badge" id="incident-count">0 events</span>
+                </div>
+                <div class="incident-log" id="incident-log">
+                    <div class="incident-empty">
+                        <span>🎉</span>
+                        <p>No incidents recorded. All services nominal.</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer" id="main-footer">
+        <p>Microservice Health Monitor &bull; AWS ECS + Fargate &bull; CI/CD via GitHub Actions &bull; IaC with Terraform</p>
+    </footer>
+
+    <script src="app.js"></script>
+</body>
+</html>

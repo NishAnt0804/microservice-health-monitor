@@ -1,0 +1,106 @@
+name: Deploy - Build & Ship
+
+on:
+  push:
+    branches: [ "main" ]
+
+permissions:
+  id-token: write
+  contents: read
+
+jobs:
+  test-and-build:
+    name: Build & Deploy to EC2
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Configure AWS Credentials (OIDC)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: ${{ secrets.AWS_ROLE_ARN }}
+          aws-region: ap-south-1
+
+      - name: Login to Amazon ECR
+        id: login-ecr
+        uses: aws-actions/amazon-ecr-login@v2
+
+      # Determine which services changed
+      - name: Check for changes
+        uses: dorny/paths-filter@v3
+        id: filter
+        with:
+          filters: |
+            user:
+              - 'services/user-service/**'
+            order:
+              - 'services/order-service/**'
+            notif:
+              - 'services/notification-service/**'
+            dashboard:
+              - 'dashboard/**'
+
+      # Build and Push (only changed services)
+      - name: Build & Push User Service
+        if: steps.filter.outputs.user == 'true'
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPO: mshealth/user-service
+        run: |
+          docker build -t $REGISTRY/$REPO:latest ./services/user-service
+          docker push $REGISTRY/$REPO:latest
+
+      - name: Build & Push Order Service
+        if: steps.filter.outputs.order == 'true'
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPO: mshealth/order-service
+        run: |
+          docker build -t $REGISTRY/$REPO:latest ./services/order-service
+          docker push $REGISTRY/$REPO:latest
+
+      - name: Build & Push Notification Service
+        if: steps.filter.outputs.notif == 'true'
+        env:
+          REGISTRY: ${{ steps.login-ecr.outputs.registry }}
+          REPO: mshealth/notification-service
+        run: |
+          docker build -t $REGISTRY/$REPO:latest ./services/notification-service
+          docker push $REGISTRY/$REPO:latest
+
+      # Deploy to EC2 via Systems Manager (SSM)
+      # This securely executes commands on the EC2 instance without SSH keys
+      - name: Deploy to EC2 via SSM
+        if: steps.filter.outputs.user == 'true' || steps.filter.outputs.order == 'true' || steps.filter.outputs.notif == 'true'
+        run: |
+          # Get AWS Account ID
+          ACCOUNT_ID=$(aws sts get-caller-identity --query Account --output text)
+          REGISTRY="$ACCOUNT_ID.dkr.ecr.ap-south-1.amazonaws.com"
+          
+          # Send SSM command
+          COMMAND_ID=$(aws ssm send-command \
+            --instance-ids "${{ secrets.EC2_INSTANCE_ID }}" \
+            --document-name "AWS-RunShellScript" \
+            --parameters 'commands=["cd /app", "aws ecr get-login-password --region ap-south-1 | docker login --username AWS --password-stdin '$REGISTRY'", "docker-compose -f docker-compose.prod.yml pull", "docker-compose -f docker-compose.prod.yml up -d"]' \
+            --region ap-south-1 \
+            --query "Command.CommandId" \
+            --output text)
+            
+          echo "Sent SSM command: $COMMAND_ID"
+          
+          # Wait for command to complete
+          aws ssm wait command-executed \
+            --command-id "$COMMAND_ID" \
+            --instance-id "${{ secrets.EC2_INSTANCE_ID }}" \
+            --region ap-south-1 || (echo "Deployment failed! Check SSM logs in AWS console." && exit 1)
+          
+          echo "Deployment successful!"
+
+      # Deploy Dashboard
+      - name: Deploy Dashboard to S3
+        if: steps.filter.outputs.dashboard == 'true'
+        run: |
+          aws s3 sync dashboard/ s3://${{ secrets.DASHBOARD_BUCKET }}/ --delete
+          aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DIST_ID }} --paths "/*"
