@@ -17,34 +17,28 @@
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          GitHub Actions                             │
 │  ┌─────────┐   ┌──────────┐   ┌──────────┐   ┌─────────────────┐  │
-│  │  Lint    │──▶│  Test    │──▶│  Build   │──▶│  Deploy to AWS  │  │
+│  │  Lint   │──▶│  Test    │──▶│  Build   │──▶│ Deploy via SSM  │  │
 │  └─────────┘   └──────────┘   └──────────┘   └─────────────────┘  │
 └───────────────────────────────────────┬─────────────────────────────┘
-                                        │
+                                        │ (OIDC Authentication)
                                         ▼
 ┌─────────────────────────── AWS Cloud ──────────────────────────────┐
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  VPC (10.0.0.0/16)                                          │   │
-│  │  ┌─────────────────────┐  ┌──────────────────────────────┐  │   │
-│  │  │  Public Subnets     │  │  Private Subnets              │  │   │
-│  │  │  ┌───────────────┐  │  │  ┌──────────┐ ┌──────────┐   │  │   │
-│  │  │  │  ALB (HTTP)   │──┼──┼─▶│  ECS     │ │  ECS     │   │  │   │
-│  │  │  │  Path Routing  │  │  │  │  Fargate │ │  Fargate │   │  │   │
-│  │  │  └───────────────┘  │  │  │  user-svc│ │  order-svc│  │  │   │
-│  │  │  ┌───────────────┐  │  │  └──────────┘ └──────────┘   │  │   │
-│  │  │  │  NAT Gateway  │  │  │  ┌──────────┐                │  │   │
-│  │  │  └───────────────┘  │  │  │  ECS     │                │  │   │
-│  │  └─────────────────────┘  │  │  Fargate │                │  │   │
-│  │                           │  │  notif-svc│               │  │   │
-│  │                           │  └──────────┘                │  │   │
-│  │                           └──────────────────────────────┘  │   │
+│  │  VPC Public Subnet                                          │   │
+│  │  ┌────────────────────────────────────────────────────────┐ │   │
+│  │  │  EC2 t3.micro (Docker Host)                            │ │   │
+│  │  │                                                        │ │   │
+│  │  │  ┌────────────┐   ┌──────────┐ ┌──────────┐ ┌────────┐ │ │   │
+│  │  │  │  NGINX     │──▶│ user-svc │ │ order-svc│ │notif-svc│ │ │   │
+│  │  │  │  (:80)     │   └──────────┘ └──────────┘ └────────┘ │ │   │
+│  │  │  └────────────┘                                        │ │   │
+│  │  └────────────────────────────────────────────────────────┘ │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                     │
 │  ┌────────┐  ┌────────────┐  ┌───────────┐  ┌──────────────────┐   │
 │  │  ECR   │  │ CloudWatch │  │    SNS    │  │  S3 + CloudFront │   │
-│  │ Images │  │  Alarms +  │  │  Email    │  │  Dashboard       │   │
-│  │        │  │  Dashboard │  │  Alerts   │  │                  │   │
+│  │ Images │  │  EC2 Alarms│  │  Alerts   │  │  Dashboard       │   │
 │  └────────┘  └────────────┘  └───────────┘  └──────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
@@ -55,14 +49,15 @@
 |--------------------|-----------------------------------------------|
 | **Backend**        | Python 3.12, Flask, Gunicorn                  |
 | **Containers**     | Docker (multi-stage builds)                   |
-| **Orchestration**  | AWS ECS Fargate                               |
+| **Orchestration**  | Docker Compose                                |
+| **Compute**        | AWS EC2 (t3.micro, Free Tier)                 |
 | **Registry**       | AWS ECR (image scanning, lifecycle policies)  |
-| **Load Balancing** | AWS ALB (path-based routing)                  |
-| **Networking**     | VPC, Public/Private Subnets, NAT Gateway, SGs |
+| **Load Balancing** | NGINX Reverse Proxy                           |
+| **Networking**     | VPC, Public Subnet, Security Groups           |
 | **Monitoring**     | CloudWatch Logs, Alarms, Dashboard            |
 | **Alerting**       | AWS SNS (email notifications)                 |
 | **IaC**            | Terraform (6 modular modules)                 |
-| **CI/CD**          | GitHub Actions (OIDC auth, change detection)  |
+| **CI/CD**          | GitHub Actions (OIDC auth, SSM Deploy)        |
 | **Frontend**       | Vanilla HTML/CSS/JS (S3 + CloudFront)         |
 | **Security**       | IAM least-privilege, non-root containers, OIDC|
 
@@ -86,13 +81,12 @@ microservice-health-monitor/
 │   └── modules/
 │       ├── networking/        # VPC, subnets, SGs
 │       ├── ecr/               # Container registries
-│       ├── ecs/               # Cluster, tasks, services
-│       ├── alb/               # Load balancer + routing
+│       ├── ec2/               # Docker host instance
 │       ├── monitoring/        # CloudWatch + SNS
 │       └── frontend/          # S3 + CloudFront
 ├── .github/workflows/
 │   ├── ci.yml                 # PR: test, lint, validate
-│   └── deploy.yml             # Main: build, push, deploy
+│   └── deploy.yml             # Main: build, push, deploy via SSM
 ├── docker-compose.yml         # Local development
 └── README.md
 ```
@@ -118,10 +112,6 @@ docker-compose up -d --build
 curl http://localhost:5001/api/users/health
 curl http://localhost:5002/api/orders/health
 curl http://localhost:5003/api/notifications/health
-
-# Open the dashboard
-# Open dashboard/index.html in your browser
-# (Set CONFIG.demoMode = false in app.js to poll real services)
 ```
 
 ### Run Tests
@@ -147,10 +137,8 @@ pytest tests/ -v
 
 ```bash
 aws configure
-# Or set environment variables:
-# export AWS_ACCESS_KEY_ID=...
-# export AWS_SECRET_ACCESS_KEY=...
-# export AWS_DEFAULT_REGION=ap-south-1
+# Set Default Region to ap-south-1
+# Set Output format to json
 ```
 
 ### 2. Deploy Infrastructure
@@ -168,7 +156,7 @@ terraform plan
 terraform apply
 ```
 
-### 3. Push Docker Images
+### 3. Push Docker Images (Manual First Run)
 
 ```bash
 # Login to ECR
@@ -197,6 +185,7 @@ aws cloudfront create-invalidation --distribution-id $(terraform output -raw clo
    - `AWS_ROLE_ARN`: ARN of the OIDC role
    - `DASHBOARD_BUCKET`: S3 bucket name (from Terraform output)
    - `CLOUDFRONT_DIST_ID`: CloudFront distribution ID (from Terraform output)
+   - `EC2_INSTANCE_ID`: Your EC2 Instance ID (from Terraform output)
 
 ## API Endpoints
 
@@ -244,7 +233,7 @@ Trigger: Push to main
 ├── Detect Changes (path-based filtering)
 ├── Run Tests (all services)
 ├── Build & Push to ECR (only changed services)
-├── Deploy to ECS (force new deployment + stability wait)
+├── Deploy to EC2 via AWS SSM (No SSH keys!)
 └── Deploy Dashboard (S3 sync + CloudFront invalidation)
 ```
 
@@ -252,15 +241,14 @@ Trigger: Push to main
 
 | Resource | Monthly Cost (approx.) |
 |----------|----------------------|
-| ECS Fargate (3 tasks, 0.25 vCPU / 0.5 GB) | ~$30 |
-| ALB | ~$22 |
-| NAT Gateway | ~$35 |
-| CloudWatch | ~$3 |
-| S3 + CloudFront | ~$1 |
-| ECR | ~$1 |
-| **Total** | **~$92/mo** |
+| EC2 `t3.micro` | **$0.00** (First 750 hrs/month free tier) |
+| VPC, Subnets, IGW | **$0.00** |
+| CloudWatch | **$0.00** (First 10 alarms / 1M requests free) |
+| S3 + CloudFront | **$0.00** (Free tier limits) |
+| ECR | **$0.00** (First 500MB free) |
+| **Total** | **$0.00/mo** (100% Free Tier) |
 
-> ** Tip**: For demo purposes, deploy → screenshot → tear down with `terraform destroy`. Total cost: a few dollars.
+> **Tip**: For demo purposes, deploy → screenshot → tear down with `terraform destroy`. 
 
 ## Teardown
 
@@ -272,5 +260,3 @@ terraform destroy
 ## License
 
 This project is open source and available under the [MIT License](LICENSE).
-
----
