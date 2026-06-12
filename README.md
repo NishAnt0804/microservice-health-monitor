@@ -102,7 +102,7 @@ microservice-health-monitor/
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-username>/microservice-health-monitor.git
+git clone https://github.com/<NishAnt0804>/microservice-health-monitor.git
 cd microservice-health-monitor
 
 # Start all services with Docker Compose
@@ -241,14 +241,13 @@ Trigger: Push to main
 
 | Resource | Monthly Cost (approx.) |
 |----------|----------------------|
-| EC2 `t3.micro` | **$0.00** (First 750 hrs/month free tier) |
+| EC2 `t3.micro` | **$0.00** (First 750 hrs/month) |
 | VPC, Subnets, IGW | **$0.00** |
 | CloudWatch | **$0.00** (First 10 alarms / 1M requests free) |
 | S3 + CloudFront | **$0.00** (Free tier limits) |
 | ECR | **$0.00** (First 500MB free) |
-| **Total** | **$0.00/mo** (100% Free Tier) |
+| **Total** | **$0.00/mo** |
 
-> **Tip**: For demo purposes, deploy → screenshot → tear down with `terraform destroy`. 
 
 ## Teardown
 
