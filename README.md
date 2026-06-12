@@ -1,4 +1,4 @@
-# 🏥 Microservice Health Monitor
+# Microservice Health Monitor
 
 > A production-grade cloud-native platform featuring **3 microservices**, full **AWS infrastructure via Terraform**, **CI/CD with GitHub Actions**, **CloudWatch monitoring with SNS alerts**, and a **real-time health dashboard** — all designed as a portfolio-ready DevOps project.
 
@@ -11,13 +11,13 @@
 
 ---
 
-## 📐 Architecture
+## Architecture
 
 ```
 ┌─────────────────────────────────────────────────────────────────────┐
 │                          GitHub Actions                             │
 │  ┌─────────┐   ┌──────────┐   ┌──────────┐   ┌─────────────────┐  │
-│  │  Lint   │──▶│  Test    │──▶│  Build   │──▶│ Deploy via SSM  │  │
+│  │  Lint    │──▶│  Test    │──▶│  Build   │──▶│  Deploy to AWS  │  │
 │  └─────────┘   └──────────┘   └──────────┘   └─────────────────┘  │
 └───────────────────────────────────────┬─────────────────────────────┘
                                         │
@@ -25,35 +25,40 @@
 ┌─────────────────────────── AWS Cloud ──────────────────────────────┐
 │                                                                     │
 │  ┌──────────────────────────────────────────────────────────────┐   │
-│  │  VPC Public Subnet                                          │   │
-│  │  ┌────────────────────────────────────────────────────────┐ │   │
-│  │  │  EC2 t3.micro (Docker Host)                            │ │   │
-│  │  │                                                        │ │   │
-│  │  │  ┌────────────┐   ┌──────────┐ ┌──────────┐ ┌────────┐ │ │   │
-│  │  │  │  NGINX     │──▶│ user-svc │ │ order-svc│ │notif-svc│ │ │   │
-│  │  │  │  (:80)     │   └──────────┘ └──────────┘ └────────┘ │ │   │
-│  │  │  └────────────┘                                        │ │   │
-│  │  └────────────────────────────────────────────────────────┘ │   │
+│  │  VPC (10.0.0.0/16)                                          │   │
+│  │  ┌─────────────────────┐  ┌──────────────────────────────┐  │   │
+│  │  │  Public Subnets     │  │  Private Subnets              │  │   │
+│  │  │  ┌───────────────┐  │  │  ┌──────────┐ ┌──────────┐   │  │   │
+│  │  │  │  ALB (HTTP)   │──┼──┼─▶│  ECS     │ │  ECS     │   │  │   │
+│  │  │  │  Path Routing  │  │  │  │  Fargate │ │  Fargate │   │  │   │
+│  │  │  └───────────────┘  │  │  │  user-svc│ │  order-svc│  │  │   │
+│  │  │  ┌───────────────┐  │  │  └──────────┘ └──────────┘   │  │   │
+│  │  │  │  NAT Gateway  │  │  │  ┌──────────┐                │  │   │
+│  │  │  └───────────────┘  │  │  │  ECS     │                │  │   │
+│  │  └─────────────────────┘  │  │  Fargate │                │  │   │
+│  │                           │  │  notif-svc│               │  │   │
+│  │                           │  └──────────┘                │  │   │
+│  │                           └──────────────────────────────┘  │   │
 │  └──────────────────────────────────────────────────────────────┘   │
 │                                                                     │
 │  ┌────────┐  ┌────────────┐  ┌───────────┐  ┌──────────────────┐   │
 │  │  ECR   │  │ CloudWatch │  │    SNS    │  │  S3 + CloudFront │   │
-│  │ Images │  │  EC2 Alarms│  │  Alerts   │  │  Dashboard       │   │
+│  │ Images │  │  Alarms +  │  │  Email    │  │  Dashboard       │   │
+│  │        │  │  Dashboard │  │  Alerts   │  │                  │   │
 │  └────────┘  └────────────┘  └───────────┘  └──────────────────┘   │
 └─────────────────────────────────────────────────────────────────────┘
 ```
 
-## 🛠 Tech Stack
+## Tech Stack
 
 | Layer              | Technology                                    |
 |--------------------|-----------------------------------------------|
 | **Backend**        | Python 3.12, Flask, Gunicorn                  |
 | **Containers**     | Docker (multi-stage builds)                   |
-| **Orchestration**  | Docker Compose                                |
-| **Compute**        | AWS EC2 (t3.micro, Free Tier)                 |
+| **Orchestration**  | AWS ECS Fargate                               |
 | **Registry**       | AWS ECR (image scanning, lifecycle policies)  |
-| **Load Balancing** | NGINX Reverse Proxy                           |
-| **Networking**     | VPC, Public Subnet, Security Groups           |
+| **Load Balancing** | AWS ALB (path-based routing)                  |
+| **Networking**     | VPC, Public/Private Subnets, NAT Gateway, SGs |
 | **Monitoring**     | CloudWatch Logs, Alarms, Dashboard            |
 | **Alerting**       | AWS SNS (email notifications)                 |
 | **IaC**            | Terraform (6 modular modules)                 |
@@ -61,7 +66,7 @@
 | **Frontend**       | Vanilla HTML/CSS/JS (S3 + CloudFront)         |
 | **Security**       | IAM least-privilege, non-root containers, OIDC|
 
-## 📂 Project Structure
+## Project Structure
 
 ```
 microservice-health-monitor/
@@ -81,7 +86,8 @@ microservice-health-monitor/
 │   └── modules/
 │       ├── networking/        # VPC, subnets, SGs
 │       ├── ecr/               # Container registries
-│       ├── ec2/               # Docker host instance
+│       ├── ecs/               # Cluster, tasks, services
+│       ├── alb/               # Load balancer + routing
 │       ├── monitoring/        # CloudWatch + SNS
 │       └── frontend/          # S3 + CloudFront
 ├── .github/workflows/
@@ -90,8 +96,6 @@ microservice-health-monitor/
 ├── docker-compose.yml         # Local development
 └── README.md
 ```
-
-## 🚀 Quick Start
 
 ### Prerequisites
 
@@ -137,7 +141,7 @@ pip install -r requirements.txt
 pytest tests/ -v
 ```
 
-## ☁️ AWS Deployment
+## AWS Deployment
 
 ### 1. Configure AWS Credentials
 
@@ -194,7 +198,7 @@ aws cloudfront create-invalidation --distribution-id $(terraform output -raw clo
    - `DASHBOARD_BUCKET`: S3 bucket name (from Terraform output)
    - `CLOUDFRONT_DIST_ID`: CloudFront distribution ID (from Terraform output)
 
-## 🔍 API Endpoints
+## API Endpoints
 
 ### User Service (`:5001`)
 | Method | Path | Description |
@@ -221,7 +225,7 @@ aws cloudfront create-invalidation --distribution-id $(terraform output -raw clo
 | `POST` | `/api/notifications/send` | Send a notification |
 | `GET` | `/api/notifications/stats` | Notification stats |
 
-## 📊 CI/CD Pipeline
+## CI/CD Pipeline
 
 ### PR Pipeline (`ci.yml`)
 ```
@@ -240,34 +244,33 @@ Trigger: Push to main
 ├── Detect Changes (path-based filtering)
 ├── Run Tests (all services)
 ├── Build & Push to ECR (only changed services)
-├── Deploy to EC2 via AWS SSM (No SSH keys!)
+├── Deploy to ECS (force new deployment + stability wait)
 └── Deploy Dashboard (S3 sync + CloudFront invalidation)
 ```
 
-## 💰 Cost Estimation
+## Cost Estimation
 
 | Resource | Monthly Cost (approx.) |
 |----------|----------------------|
-| EC2 `t3.micro` | **$0.00** (First 750 hrs/month free tier) |
-| VPC, Subnets, IGW | **$0.00** |
-| CloudWatch | **$0.00** (First 10 alarms / 1M requests free) |
-| S3 + CloudFront | **$0.00** (Free tier limits) |
-| ECR | **$0.00** (First 500MB free) |
-| **Total** | **$0.00/mo** (100% Free Tier) |
+| ECS Fargate (3 tasks, 0.25 vCPU / 0.5 GB) | ~$30 |
+| ALB | ~$22 |
+| NAT Gateway | ~$35 |
+| CloudWatch | ~$3 |
+| S3 + CloudFront | ~$1 |
+| ECR | ~$1 |
+| **Total** | **~$92/mo** |
 
-> **💡 Tip**: For demo purposes, deploy → screenshot → tear down with `terraform destroy`. Total cost: a few dollars.
+> ** Tip**: For demo purposes, deploy → screenshot → tear down with `terraform destroy`. Total cost: a few dollars.
 
-## 🧹 Teardown
+## Teardown
 
 ```bash
 cd terraform
 terraform destroy
 ```
 
-## 📝 License
+## License
 
 This project is open source and available under the [MIT License](LICENSE).
 
 ---
-
-Built with ☕ and a passion for DevOps.
